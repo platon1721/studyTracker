@@ -1,9 +1,9 @@
 import React, {useCallback, useMemo, useRef, useState} from 'react';
 
-import {Text, TouchableOpacity, View, StyleSheet, FlatList, RefreshControl} from 'react-native';
+import {Text, TouchableOpacity, View, StyleSheet, FlatList, RefreshControl, Alert} from 'react-native';
 import {Ionicons} from "@expo/vector-icons";
 import {Colors} from "../../constans/Colors";
-import {Subject} from "../../types";
+import {StudySession, Subject} from "../../types";
 import {useFocusEffect} from "expo-router";
 import {storageUtils} from "../../utils/storage"
 
@@ -12,25 +12,46 @@ import AddSubjectModal from "../../components/AddSubjectModal";
 
 import {BottomSheetModal, BottomSheetModalProvider} from "@gorhom/bottom-sheet";
 import {SafeAreaView} from "react-native-safe-area-context";
+import SubjectCard from "../../components/SubjectCard";
 
 
 const Subjects = () => {
 
     const [subjects, setSubjects] = useState<Subject[]>([]);
+    const [sessions, setSessions] = useState<StudySession[]>([]);
 
-    const {loadSubjects, saveSubjects} = storageUtils;
+    const {loadSubjects, saveSubjects, loadSessions} = storageUtils;
     const [refreshing, setRefreshing] = useState(false);
     const modalRef = useRef<BottomSheetModal>(null)
     const snapPoints = useMemo(() => ["70%"], []);
 
     useFocusEffect(useCallback(() => {
-        getSubjects();
+        getData();
     }, []))
 
-    const getSubjects = async () => {
-        const data = await loadSubjects();
-        setSubjects(data);
+    const getData = async () => {
+        const [subjectsData, sessionsData] = await Promise.all([
+            loadSubjects(),
+            loadSessions()
+        ]);
+        setSubjects(subjectsData)
+        setSessions(sessionsData)
     }
+
+    const getWeeklyHours = (subjectId: string): number => {
+        const now = new Date();
+        const startOfWeek = new Date(now);
+        startOfWeek.setDate(now.getDate() - now.getDay()); // Start of week (Sunday)
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        const weekSessions = sessions.filter(session => {
+            const sessionDate = new Date(session.date);
+            return session.subjectId === subjectId && sessionDate >= startOfWeek;
+        });
+
+        const totalMinutes = weekSessions.reduce((sum, session) => sum + session.duration, 0);
+        return totalMinutes / 60; // Convert minutes to hours
+    };
 
     const showModal = ()=> {
         console.log('Add subject pressed')
@@ -48,8 +69,18 @@ const Subjects = () => {
         closeModal();
     };
 
+    const deleteSubject = async (id: string) => {
+        const next = subjects.filter(s => s.id !== id);
+        setSubjects(next);
+        await saveSubjects(next);
+    }
+
     const ListItem = ({item}: { item: Subject }) => (
-        <Text>{item.name}</Text>
+        <SubjectCard
+            subject={item}
+            hoursThisWeek={getWeeklyHours(item.id)}
+            onDelete={deleteSubject}
+        />
     )
 
     const EmptyState = () => (
@@ -61,7 +92,6 @@ const Subjects = () => {
 
     return (
         <BottomSheetModalProvider>
-            <SafeAreaView style={[styles.container]} edges={['top', 'bottom']}>
                 <View style={{flex: 1}}>
                     <FlatList
                         data={subjects}
@@ -74,7 +104,7 @@ const Subjects = () => {
                         ItemSeparatorComponent={() => <View style={{height: 2, backgroundColor: "lightgray"}}/>}
                         renderItem={ListItem}
                         refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={getSubjects}/>
+                            <RefreshControl refreshing={refreshing} onRefresh={getData}/>
                         }
                     />
                     <TouchableOpacity
@@ -88,7 +118,6 @@ const Subjects = () => {
                     snapPoints={snapPoints}>
                     <AddSubjectModal onBack={closeModal} onSave={handleSaveSubject}/>
                 </BottomSheetModal>
-            </SafeAreaView>
         </BottomSheetModalProvider>
     );
 };
@@ -120,9 +149,6 @@ const styles = StyleSheet.create({
         fontSize: 20,
         fontWeight: 'bold',
         color: Colors.grey
-    },
-    container: {
-        flex: 1,
     }
 });
 export default Subjects;

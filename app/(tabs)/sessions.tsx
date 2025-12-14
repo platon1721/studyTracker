@@ -3,29 +3,33 @@ import React, {useCallback, useMemo, useRef, useState} from 'react';
 import {FlatList, RefreshControl, StyleSheet, Text, TouchableOpacity, View} from 'react-native';
 import {Ionicons} from "@expo/vector-icons";
 import {Colors} from "../../constans/Colors";
-import {StudySession} from "../../types";
+import {StudySession, Subject} from "../../types";
 import {useFocusEffect} from "expo-router";
 import {storageUtils} from "../../utils/storage";
 import {BottomSheetModal, BottomSheetModalProvider} from "@gorhom/bottom-sheet";
-import {SafeAreaView} from "react-native-safe-area-context";
-import AddSubjectModal from "../../components/AddSubjectModal";
 import AddSessionModal from "../../components/AddSessionModal";
+import SessionCard from "../../components/SessionCard";
 
 const Sessions = () => {
 
     const [sessions, setSessions] = useState<StudySession[]>([]);
-    const {loadSessions, saveSessions} = storageUtils;
+    const [subjects, setSubjects] = useState<Subject[]>([]);
+    const {loadSessions, saveSessions, loadSubjects} = storageUtils;
     const [refreshing, setRefreshing] = useState(false);
     const modalRef = useRef<BottomSheetModal>(null)
     const snapPoints = useMemo(() => ["100%"], []);
 
     useFocusEffect(useCallback(() => {
-        getSessions();
+        getData();
     }, []))
 
-    const getSessions = async () => {
-        const data = await loadSessions();
-        setSessions(data);
+    const getData = async () => {
+        const [subjectsData, sessionsData] = await Promise.all([
+            loadSubjects(),
+            loadSessions()
+        ]);
+        setSubjects(subjectsData)
+        setSessions(sessionsData)
     }
 
     const showModal = ()=> {
@@ -44,8 +48,18 @@ const Sessions = () => {
         closeModal();
     }
 
+    const deleteSession = async (id: string) => {
+        const next = sessions.filter(s => s.id !== id);
+        setSessions(next);
+        await saveSessions(next);
+    }
+
     const ListItem = ({item}: { item: StudySession }) => (
-        <Text>{item.id}</Text>
+        <SessionCard
+            session={item}
+            subject={subjects.find(s => s.id === item.subjectId)}
+            onDelete={deleteSession}
+        />
     )
 
     const EmptyState = () => (
@@ -69,7 +83,7 @@ const Sessions = () => {
                         ItemSeparatorComponent={() => <View style={{height: 2, backgroundColor: "lightgray"}}/>}
                         renderItem={ListItem}
                         refreshControl={
-                            <RefreshControl refreshing={refreshing} onRefresh={getSessions}/>
+                            <RefreshControl refreshing={refreshing} onRefresh={getData}/>
                         }
                     />
                     <TouchableOpacity
