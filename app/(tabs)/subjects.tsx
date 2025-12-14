@@ -20,7 +20,7 @@ const Subjects = () => {
     const [subjects, setSubjects] = useState<Subject[]>([]);
     const [sessions, setSessions] = useState<StudySession[]>([]);
 
-    const {loadSubjects, saveSubjects, loadSessions} = storageUtils;
+    const {loadSubjects, saveSubjects, loadSessions, saveSessions} = storageUtils;
     const [refreshing, setRefreshing] = useState(false);
     const modalRef = useRef<BottomSheetModal>(null)
     const snapPoints = useMemo(() => ["70%"], []);
@@ -71,8 +71,11 @@ const Subjects = () => {
 
     const deleteSubject = async (id: string) => {
         const next = subjects.filter(s => s.id !== id);
+        const subjectSessions = sessions.filter(s => s.subjectId !== id);
+        setSessions(subjectSessions);
         setSubjects(next);
         await saveSubjects(next);
+        await saveSessions(subjectSessions);
     }
 
     const ListItem = ({item}: { item: Subject }) => (
